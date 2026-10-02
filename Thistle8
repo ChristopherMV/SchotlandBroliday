@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Thistle 8 · Reiskaart Speyside–Glasgow</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: Georgia, "Times New Roman", serif; background: #0d0906; color: #eceade; }
+    #app { display: flex; flex-direction: row; height: 100vh; }
+    #panel { width: 380px; background: #1e1710; border-right: 1px solid #3b2e1c; display: flex; flex-direction: column; }
+    #panel-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+    #mapwrap { flex: 1; position: relative; background: #0b1218; }
+    #map { position: absolute; inset: 0; background: #0d0906; }
+    header { padding: 16px 16px 10px; border-bottom: 1px solid #3b2e1c; }
+    h1 { font-size: 22px; letter-spacing: 0.02em; color: #eceade; }
+    .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.25em; color: #717c6f; margin-top: 4px; }
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px 0; }
+    .pill { font-family: inherit; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      border: 1px solid #3b2e1c; color: #717c6f; background: transparent; border-radius: 999px;
+      padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .pill.active { border-color: #c9a227; color: #d8b44a; background: #241a0e; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .etappe { padding: 14px 16px 6px; }
+    .etappe .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.25em; color: #717c6f; }
+    .etappe .titel { font-size: 19px; margin-top: 3px; }
+    .prog { padding: 8px 10px 16px; }
+    .item { display: flex; gap: 10px; padding: 9px 8px; border-radius: 10px; }
+    .item.click { cursor: pointer; }
+    .item.click:hover { background: #0f150f; }
+    .item.active { background: #0f150f; box-shadow: 0 0 0 1px rgba(201,162,39,0.4); }
+    .item .tijd { font-size: 11px; font-weight: 700; color: #d8b44a; width: 38px; flex-shrink: 0; padding-top: 2px; }
+    .item .body { flex: 1; min-width: 0; }
+    .item .t { font-size: 14px; }
+    .item .plek { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #717c6f; margin-top: 2px; }
+    .item .tekst { font-size: 12px; color: #a8b0a2; margin-top: 4px; line-height: 1.45; }
+    footer { padding: 10px 16px; border-top: 1px solid #3b2e1c; font-size: 10px; color: #717c6f; }
+    a { color: #d8b44a; }
+    #nogi { position: absolute; inset: 0; background: rgba(13,9,6,0.9); display: none;
+      align-items: center; justify-content: center; z-index: 10; padding: 20px; }
+    .gatecard { max-width: 440px; background: #1e1710; border: 1px solid #3b2e1c; border-radius: 14px; padding: 22px; }
+    .gatecard h2 { font-size: 19px; margin-bottom: 8px; }
+    .gatecard p { font-size: 13px; color: #a8b0a2; line-height: 1.55; margin-bottom: 10px; }
+    .gatecard ol { font-size: 13px; color: #a8b0a2; line-height: 1.6; margin: 6px 0 14px 20px; }
+    #mapnote { position: absolute; left: 12px; bottom: 12px; z-index: 5; background: rgba(13,9,6,0.8);
+      border-radius: 8px; padding: 4px 10px; font-size: 10px; color: #a8b0a2; }
+    .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); }
+    .leaflet-popup-content { font-family: Georgia, serif; margin: 12px 14px; min-width: 200px; max-width: 260px; }
+    .pp-naam { font-size: 15px; font-weight: 700; color: #16100a; }
+    .pp-dag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #8a6d1f; margin: 3px 0 8px; }
+    .pp-item { font-size: 13px; color: #333; margin-top: 6px; }
+    .pp-item b { color: #333; }
+    .pp-tijd { font-weight: 700; color: #8a6d1f; margin-right: 4px; }
+    .pp-tekst { font-size: 12px; color: #666; margin-top: 2px; line-height: 1.4; }
+    .leaflet-container { background: #0d0906; }
+    @media (max-width: 760px) {
+      #app { flex-direction: column; }
+      #panel { width: 100%; height: 48%; order: 2; border-right: none; border-top: 1px solid #3b2e1c; }
+      #mapwrap { height: 52%; order: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <header>
+        <h1>The Thistle 8</h1>
+        <div class="sub">Speyside → Glasgow · 8–12 oktober 2026</div>
+      </header>
+      <div class="pills" id="pills"></div>
+      <div id="panel-scroll">
+        <div class="etappe">
+          <div class="label" id="etappe-label">Complete rondrit</div>
+          <div class="titel" id="etappe-titel">Hele reis · dag 1 t/m 5</div>
+        </div>
+        <div class="prog" id="prog"></div>
+      </div>
+      <footer>Kaartweergave: OpenStreetMap · reisroute &amp; programma: The Thistle 8</footer>
+    </aside>
+    <main id="mapwrap">
+      <div id="map"></div>
+      <div id="mapnote">Twee vingers: knijpen om te zoomen · tik op een marker voor het programma</div>
+      <div id="nogi">
+        <div class="gatecard">
+          <h2>🗺️ Download voor de echte kaart</h2>
+          <p>
+            Deze voorbeeldweergave in de chat blokkeert externe kaarttegels. Download dit bestand via de
+            canvas-knop en open het in je eigen browser of op je telefoon — de volledige
+            OpenStreetMap-kaart met straatnamen laadt dan <b>meteen, zonder API-key of account</b>.
+          </p>
+          <ol>
+            <li>Klik op <b>download</b> bij deze canvas</li>
+            <li>Open het HTML-bestand in je browser of telefoon</li>
+            <li>Klaar — de kaart werkt direct</li>
+          </ol>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // ---------------- Data ----------------
+    var MAP_PLACES = {
+      abzairport: { name: "Aberdeen Airport", lat: 57.2019, lng: -2.1978 },
+      glenfarclas: { name: "Glenfarclas Distillery", lat: 57.423, lng: -3.3176 },
+      aberlour: { name: "Aberlour", lat: 57.4708, lng: -3.2255 },
+      craigellachie: { name: "Craigellachie", lat: 57.4898, lng: -3.188 },
+      tamdhu: { name: "Tamdhu · Knockendo", lat: 57.4555, lng: -3.3422 },
+      fochabers: { name: "Fochabers · Red Lion", lat: 57.612, lng: -3.097 },
+      tomintoul: { name: "Tomintoul", lat: 57.2519, lng: -3.3793 },
+      dalwhinnie: { name: "Dalwhinnie", lat: 56.9374, lng: -4.2362 },
+      pitlochry: { name: "Pitlochry", lat: 56.7032, lng: -3.7311 },
+      perth: { name: "Perth", lat: 56.396, lng: -3.437 },
+      glasgow: { name: "Holiday Inn · Stockwell St", lat: 55.8575, lng: -4.248 },
+      clydeside: { name: "Clydeside Distillery", lat: 55.8624, lng: -4.297 },
+      glairport: { name: "Glasgow Airport", lat: 55.8719, lng: -4.433 },
+      ams: { name: "Amsterdam Schiphol", lat: 52.3086, lng: 4.7639 }
+    };
+
+    var DAY_COLORS = { 1: "#e53935", 2: "#1e88e5", 3: "#43a047", 4: "#8e24aa", 5: "#f4511e" };
+
+    var ROUTE_DAYS = [
+      { day: 1, titel: "Aankomst in Speyside", vlucht: { van: "ams", naar: "abzairport" }, kano: false,
+        route: ["abzairport", "glenfarclas", "aberlour", "craigellachie", "fochabers"], options: [],
+        program: [
+          { tijd: "08:10", titel: "Vlucht KL911 naar Aberdeen", plek: "Amsterdam → Aberdeen", tekst: "Aankomst 08:40 lokale tijd (GMT+1).", stop: "abzairport" },
+          { tijd: "09:30", titel: "Huurauto ophalen", plek: "Enterprise · Aberdeen Airport", tekst: "Ford Tourneo voor 8 personen — en ja, links rijden.", stop: "abzairport" },
+          { tijd: "11:30", titel: "Glenfarclas Distillery", plek: "Speyside", tekst: "Tasting op een van de beroemdste familie-distilleerderijen.", stop: "glenfarclas" },
+          { tijd: "13:00", titel: "Lunch bij The Fresh", plek: "Aberlour", tekst: "Verse hap na de eerste dram van de week.", stop: "aberlour" },
+          { tijd: "14:00", titel: "Speyside Cooperage", plek: "Craigellachie", tekst: "Zien hoe de whiskievaten met de hand worden gebouwd.", stop: "craigellachie" },
+          { tijd: "15:30", titel: "Craigellachie Bridge & Linn Falls", plek: "Craigellachie", tekst: "Korte fotostop bij de oude brug over de Spey." },
+          { tijd: "18:00", titel: "Check-in Red Lion Tavern", plek: "Fochabers", tekst: "Pincode 2466 — slapen boven de kroeg.", stop: "fochabers" },
+          { tijd: "19:30", titel: "Diner bij Mother Goose", plek: "Fochabers", tekst: "Eerste avondmaal met z'n achten." }
+        ] },
+      { day: 2, titel: "De Spey af", vlucht: null, kano: true,
+        route: ["tamdhu", "craigellachie"], options: [],
+        program: [
+          { tijd: "10:00", titel: "Kanotocht op de Spey", plek: "Start: Tamdhu · Knockendo", tekst: "Met de stroom mee naar het noordoosten.", stop: "tamdhu" },
+          { tijd: "15:30", titel: "Aankomst bij Telford Bridge", plek: "Craigellachie", tekst: "De kano's uit op de klassieke plek van het dorp.", stop: "craigellachie" },
+          { tijd: "19:30", titel: "Diner The Highlander Inn", plek: "Craigellachie", tekst: "Whiskybar met honderden flessen.", stop: "craigellachie" }
+        ] },
+      { day: 3, titel: "Oversteken naar Glasgow", vlucht: null, kano: false,
+        route: ["craigellachie", "perth", "glasgow"], options: ["tomintoul", "dalwhinnie", "pitlochry"],
+        optionPath: ["craigellachie", "tomintoul", "dalwhinnie", "pitlochry", "perth"],
+        program: [
+          { tijd: "09:00", titel: "Uitchecken & vertrek", plek: "Speyside → Glasgow", tekst: "Koffers in de Tourneo, richting het westen.", stop: "craigellachie" },
+          { tijd: "—", titel: "Route kiezen onderweg", plek: "Twee opties", tekst: "Snelste via Perth (onderweg Dalwhinnie & Pitlochry), of mooiste via Tomintoul.", stop: "tomintoul" },
+          { tijd: "16:00", titel: "Footballmatch", plek: "Glasgow", tekst: "Live voetbal in de voetbalstad van Schotland.", stop: "glasgow" },
+          { tijd: "18:00", titel: "Check-in Holiday Inn Express", plek: "Glasgow City Ctr Riverside", tekst: "122 Stockwell Street · pincode 7408." }
+        ] },
+      { day: 4, titel: "Glasgow on tour", vlucht: null, kano: false,
+        route: ["glasgow", "clydeside"], options: [],
+        program: [
+          { tijd: "10:30", titel: "Glasgow Bike Tour", plek: "Gallus Pedals · Washington Street", tekst: "De stad op de fiets met een gids.", stop: "glasgow" },
+          { tijd: "15:00", titel: "Clydeside Distillery", plek: "Riverside · Glasgow", tekst: "Tour & tasting aan de Clyde.", stop: "clydeside" },
+          { tijd: "Avond", titel: "Vrije avond", plek: "Glasgow", tekst: "Zelf invullen: kroegen, muziek of vroeg naar bed." }
+        ] },
+      { day: 5, titel: "Huiswaarts", vlucht: { van: "glairport", naar: "ams" }, kano: false,
+        route: ["glasgow", "glairport"], options: [],
+        program: [
+          { tijd: "07:00", titel: "Uitchecken & auto inleveren", plek: "Enterprise · Glasgow", tekst: "Denk om de volle tank!", stop: "glasgow" },
+          { tijd: "09:10", titel: "Vlucht KL936", plek: "Glasgow → Amsterdam", tekst: "Aankomst 11:40 op Schiphol.", stop: "glairport" },
+          { tijd: "Tip", titel: "Taxfree whisky", plek: "Glasgow Airport", tekst: "Maximaal 1 liter als handbagage." }
+        ] }
+    ];
+
+    // ---------------- App ----------------
+    var map = null, layers = {}, markers = {}, mode = "all", ready = false;
+
+    function $(id) { return document.getElementById(id); }
+    function etappe(d) { for (var i = 0; i < ROUTE_DAYS.length; i++) { if (ROUTE_DAYS[i].day === d) return ROUTE_DAYS[i]; } return ROUTE_DAYS[0]; }
+    function latlng(id) { var p = MAP_PLACES[id]; return [p.lat, p.lng]; }
+
+    function numberIcon(num, color) {
+      return L.divIcon({
+        className: "",
+        html: '<div style="width:26px;height:26px;border-radius:50%;background:' + color +
+              ';border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.55);display:flex;align-items:center;' +
+              'justify-content:center;font:700 11px Georgia,serif;color:#fff;">' + num + "</div>",
+        iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14]
+      });
+    }
+
+    function optionIcon(color) {
+      return L.divIcon({
+        className: "",
+        html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid ' + color +
+              ';box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>',
+        iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -9]
+      });
+    }
+
+    function popupHtml(r, id) {
+      var p = MAP_PLACES[id];
+      var items = r.program.filter(function (it) { return it.stop === id; });
+      var body = items.map(function (it) {
+        return '<div class="pp-item"><span class="pp-tijd">' + it.tijd + "</span><b>" + it.titel +
+               '</b><div class="pp-tekst">' + it.tekst + "</div></div>";
+      }).join("");
+      return '<div class="pp-naam">' + p.name + '</div><div class="pp-dag">Dag ' + r.day + " · " + r.titel + "</div>" + body;
+    }
+
+    function initApp() {
+      var osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
+      });
+      var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 18,
+        attribution: "Tiles &copy; Esri"
+      });
+
+      map = L.map("map", { center: [56.8, -3.6], zoom: 7, zoomControl: true });
+      osm.addTo(map);
+      L.control.layers({ "Straatkaart (OSM)": osm, "Satelliet": sat }, null, { position: "topright" }).addTo(map);
+
+      ROUTE_DAYS.forEach(function (r) {
+        var color = DAY_COLORS[r.day];
+        var group = L.layerGroup();
+        layers[r.day] = group;
+        markers[r.day] = {};
+
+        if (r.route.length > 1) {
+          var opts = { color: color, weight: 4, opacity: 0.9 };
+          if (r.kano) { opts.dashArray = "2,10"; opts.weight = 5; opts.lineCap = "round"; }
+          group.addLayer(L.polyline(r.route.map(latlng), opts));
+        }
+        if (r.optionPath) {
+          group.addLayer(L.polyline(r.optionPath.map(latlng), { color: color, weight: 3, dashArray: "10,8", opacity: 0.75 }));
+        }
+        if (r.vlucht) {
+          group.addLayer(L.polyline([latlng(r.vlucht.van), latlng(r.vlucht.naar)], { color: color, weight: 2.5, dashArray: "4,10", opacity: 0.85 }));
+        }
+        r.route.forEach(function (id, i) {
+          var mk = L.marker(latlng(id), { icon: numberIcon(i + 1, color), title: MAP_PLACES[id].name });
+          mk.bindPopup(popupHtml(r, id));
+          group.addLayer(mk);
+          markers[r.day][id] = mk;
+        });
+        (r.options || []).forEach(function (id) {
+          var mk = L.marker(latlng(id), { icon: optionIcon(color), title: MAP_PLACES[id].name });
+          mk.bindPopup(popupHtml(r, id));
+          group.addLayer(mk);
+          if (!markers[r.day][id]) markers[r.day][id] = mk;
+        });
+      });
+
+      ready = true;
+      setMode(mode);
+    }
+
+    function setMode(m) {
+      mode = m;
+      if (ready) {
+        Object.keys(layers).forEach(function (d) {
+          var g = layers[d];
+          var on = (m === "all") || (Number(d) === m);
+          if (on) { g.addTo(map); } else { map.removeLayer(g); }
+        });
+        fitView();
+      }
+      renderPanel();
+    }
+
+    function fitView() {
+      if (!map) return;
+      var b = L.latLngBounds([]);
+      ROUTE_DAYS.forEach(function (r) {
+        if (mode !== "all" && r.day !== mode) return;
+        r.route.forEach(function (id) { b.extend(latlng(id)); });
+      });
+      if (b.isValid()) map.fitBounds(b, { padding: [50, 50] });
+    }
+
+    // ---------------- Zijbalk ----------------
+    function renderPills() {
+      var el = $("pills");
+      el.innerHTML = "";
+      var mk = function (label, val, color) {
+        var b = document.createElement("button");
+        b.className = "pill" + (mode === val ? " active" : "");
+        var dot = color ? '<span class="dot" style="background:' + color + '"></span>' : "🗺️ ";
+        b.innerHTML = dot + label;
+        b.onclick = function () { setMode(val); };
+        el.appendChild(b);
+      };
+      mk("Hele reis", "all", null);
+      ROUTE_DAYS.forEach(function (r) { mk("Dag " + r.day, r.day, DAY_COLORS[r.day]); });
+    }
+
+    function renderPanel() {
+      renderPills();
+      if (mode === "all") {
+        $("etappe-label").textContent = "Complete rondrit";
+        $("etappe-titel").textContent = "Hele reis · dag 1 t/m 5";
+        var el = $("prog");
+        el.innerHTML = "";
+        ROUTE_DAYS.forEach(function (r) {
+          var stops = r.route.map(function (id) { return MAP_PLACES[id].name; });
+          var d = document.createElement("div");
+          d.className = "item click";
+          d.innerHTML =
+            '<span class="dot" style="background:' + DAY_COLORS[r.day] + ';margin-top:6px;flex-shrink:0;"></span>' +
+            '<div class="body"><div class="t">Dag ' + r.day + " · " + r.titel + "</div>" +
+            '<div class="tekst">' + stops[0] + " → " + stops[stops.length - 1] + " · " + r.program.length + ' activiteiten — tik voor het programma</div></div>';
+          d.onclick = function () { setMode(r.day); };
+          el.appendChild(d);
+        });
+      } else {
+        var r = etappe(mode);
+        $("etappe-label").textContent = "Etappe · dag " + r.day;
+        $("etappe-titel").textContent = r.titel;
+        var el = $("prog");
+        el.innerHTML = "";
+        r.program.forEach(function (it) {
+          var d = document.createElement("div");
+          d.className = "item" + (it.stop ? " click" : "");
+          d.innerHTML = '<span class="tijd">' + it.tijd + "</span>" +
+            '<div class="body"><div class="t">' + it.titel + "</div>" +
+            '<div class="plek">' + it.plek + "</div>" +
+            '<div class="tekst">' + it.tekst + "</div></div>";
+          if (it.stop) {
+            d.onclick = function () {
+              var mo = markers[r.day] ? markers[r.day][it.stop] : null;
+              if (mo && ready) {
+                map.setView(mo.getLatLng(), Math.max(map.getZoom(), 13));
+                mo.openPopup();
+              }
+              Array.prototype.forEach.call(el.children, function (c) { c.classList.remove("active"); });
+              d.classList.add("active");
+            };
+          }
+          el.appendChild(d);
+        });
+      }
+    }
+
+    // ---------------- Opstart ----------------
+    renderPanel();
+    if (typeof L === "undefined") {
+      $("nogi").style.display = "flex";
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>
